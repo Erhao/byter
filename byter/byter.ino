@@ -6,28 +6,43 @@
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <Ticker.h>
-
-Ticker writeFileTicker;
+#include <EEPROM.h> 
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 32
+
+// #define EEPROM_write(address, stru) {byte *p_stru = (byte*)&(stru);for(int i = 0;i<sizeof(stru);i++){ EEPROM.write(address+i,p_stru[i]);delay(4);}EEPROM.commit();}//EEPROM.end();
+// #define EEPROM_read(address,stru) {byte *p_stru = (byte*)&(stru);for(int i = 0;i<sizeof(stru);i++){ p_stru[i]=char(EEPROM
+#define EEPROM_ADDR 1
+
+Ticker writeCountTicker;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 AsyncWebServer server(80);
 
-File logFile;
-
-const char *ssid = "KeyboardStokesCounter";
-const char *password = "12345678";
+const char *SSID = "KeyboardStokesCounter";
+const char *PASSWORD = "12345678";
 
 int cnt;
 
-void saveCount() {
-  logFile.close();
-  logFile = SPIFFS.open("/keyCount.txt", "w");
-  String text = "Up to now, " + (String) cnt + " keyboard strokes have been recorded.";
-  logFile.print(text);
+void writeCount() {
+  EEPROM.put(EEPROM_ADDR, cnt);
+}
+
+int readCount() {
+  int _cnt;
+  EEPROM.get(EEPROM_ADDR, _cnt);
+  return _cnt;
+}
+
+void clearCount() {
+  EEPROM.begin(10);
+  // write a 0 to all 10 bytes of the EEPROM
+  for (int i = 0; i < 10; i++) {
+    EEPROM.write(i, 0);
+  }
+  EEPROM.end();
 }
 
 void rw() {
@@ -87,6 +102,21 @@ void rw() {
       }
     }
   }
+}
+
+void startServer() {
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    int _cnt = readCount();
+    String text = "Up to now, " + (String) _cnt + " keyboard strokes have been recorded.";
+    request->send(200, "text/plain", text);
+  });
+
+  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
+    clearCount();
+    request->send(200, "text/plain", "KeyStoke Count Cleared!");
+  });
+  
+  server.begin();
 }
 
 String getKey(int serialData){
@@ -210,23 +240,11 @@ void setup() {
   }
 
   WiFi.mode(WIFI_STA);
-  WiFi.softAP(ssid,password);
-  SPIFFS.begin();
-  logFile = SPIFFS.open("/keyCount.txt", "a+");
-  
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/keyCount.txt", "text/plain");
-  });
+  WiFi.softAP(SSID, PASSWORD);
 
-  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-    logFile.close();
-    logFile = SPIFFS.open("/keyCount.txt", "w");
-    request->send(200, "text/plain", "KeyStoke Count Cleared!");
-  });
-  
-  server.begin();
+  startServer();
 
-  writeFileTicker.attach(10, saveCount);
+  writeCountTicker.attach(10, writeCount);
 }
 
 // loop
