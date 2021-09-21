@@ -13,7 +13,9 @@
 
 // #define EEPROM_write(address, stru) {byte *p_stru = (byte*)&(stru);for(int i = 0;i<sizeof(stru);i++){ EEPROM.write(address+i,p_stru[i]);delay(4);}EEPROM.commit();}//EEPROM.end();
 // #define EEPROM_read(address,stru) {byte *p_stru = (byte*)&(stru);for(int i = 0;i<sizeof(stru);i++){ p_stru[i]=char(EEPROM
-#define EEPROM_ADDR 1
+int addr = 1;
+
+String helloText = "Keyboard Stokes Counter";
 
 Ticker writeCountTicker;
 
@@ -27,19 +29,21 @@ const char *PASSWORD = "12345678";
 int cnt;
 
 void writeCount() {
-  EEPROM.put(EEPROM_ADDR, cnt);
+//  EEPROM.write(addr, cnt);
+  EEPROM.begin(4);
+  EEPROM.put(addr, cnt);
 }
 
 int readCount() {
   int _cnt;
-  EEPROM.get(EEPROM_ADDR, _cnt);
+  EEPROM.get(addr, _cnt);
   return _cnt;
 }
 
 void clearCount() {
-  EEPROM.begin(10);
-  // write a 0 to all 10 bytes of the EEPROM
-  for (int i = 0; i < 10; i++) {
+  EEPROM.begin(4);
+  // write a 0 to all 4 bytes of the EEPROM
+  for (int i = 0; i < 4; i++) {
     EEPROM.write(i, 0);
   }
   EEPROM.end();
@@ -227,6 +231,15 @@ String getKey(int serialData){
   if(serialData==0xE4){return "[rightCtrl]";}
 }
 
+void startDisplay() {
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.setTextSize(1);
+  display.println(helloText);
+  display.display();
+}
+
 // main
 void setup() {
   // put your setup code here, to run once:
@@ -238,6 +251,8 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
+
+  startDisplay();
 
   WiFi.mode(WIFI_STA);
   WiFi.softAP(SSID, PASSWORD);
