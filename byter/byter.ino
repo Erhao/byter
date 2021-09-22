@@ -7,6 +7,7 @@
 #include <ESPAsyncWebServer.h>
 #include <Ticker.h>
 #include <EEPROM.h> 
+#include <gpio.h>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 32
@@ -39,24 +40,30 @@ bool isOverflow = false;
 
 int lastState = LOW;
 int curState;
-unsigned long pressedMillis;
-unsigned long releasedMillis;
+unsigned long pressedMillis = 0;
+unsigned long releasedMillis = 0;
 
 bool isWifiOn = false;
 
 
-void writeCnt() {
+int writeCnt() {
   EEPROM.put(addr, cnt);
+  return EEPROM.commit();
 }
 
-void manualwriteCnt() {
-  writeCnt();
+void manualWriteCnt() {
+  int writeRes = writeCnt();
+  String text = "";
+  if (writeRes) {
+    text = "Saved !";
+  } else {
+    text = "Save Failed !";
+  }
   
-  String text = "Saved !";
   displayText(text);
 }
 
-int readCnt() {
+unsigned int readCnt() {
   unsigned int _cnt;
   EEPROM.get(addr, _cnt);
   return _cnt;
@@ -199,9 +206,9 @@ void startDisplay() {
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.println(helloText[0]);
-  display.setCursor(44, 4);
+  display.setCursor(48, 10);
   display.println(helloText[1]);
-  display.setCursor(85, 8);
+  display.setCursor(85, 20);
   display.println(helloText[2]);
   display.display();
   delay(3000);
@@ -211,8 +218,22 @@ void startDisplay() {
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
+
+  Serial.println("");
+  EEPROM.begin(256);
+  for (int addr = 0; addr < 256; addr ++) {
+    int data = EEPROM.read(addr);
+    Serial.print(data);
+    Serial.print(" ");
+    delay(2);
+  }
+  Serial.println("End read");
+  
+  PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTMS_U, FUNC_GPIO14);
   
   cnt = readCnt();
+  Serial.println("setup readCnt");
+  Serial.println(cnt);
 
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -231,8 +252,6 @@ void loop() {
   rw();
 
   // read the state of the switch/button:
-  pressedMillis = 0;
-  releasedMillis = 0;
   curState = GPIO_INPUT_GET(GPIO_ID_PIN(BTN_PIN));
 
   if (lastState == LOW && curState == HIGH)        // button is pressed
@@ -243,7 +262,7 @@ void loop() {
     if (pressMillis < ONE_SECOND) {
       Serial.println("a SHORT press is detected");
       // 将cnt写入EEPROM
-      manualwriteCnt();
+      manualWriteCnt();
     } else if (pressMillis < TEN_SECONDS) {
       Serial.println("a LONG press is detected");
       // 开关wifi

@@ -1,10 +1,6 @@
 #include <EEPROM.h>
 
-int a = 0;
-int addr = 0;
-int value;
-
-void clearCount() {
+void clearEEPROM() {
   EEPROM.begin(1024);
   // write a 0 to all 4 bytes of the EEPROM
   for (int i = 0; i < 1024; i++) {
@@ -15,36 +11,18 @@ void clearCount() {
   Serial.println("res clearCount " + (String) res);
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(115200);
-  
-  EEPROM.begin(4096); //申请操作4096字节数据
-  for(addr = 0; addr<4096; addr++)
-  {
-    int data = addr;
-    EEPROM.write(addr, addr); //写数据
-  }
-  EEPROM.commit(); //保存更改的数据
+//  clearEEPROM();
 
-  Serial.println("End write");
-
-
-  EEPROM.begin(4096); //申请操作4096字节数据
-  for(addr = 0; addr<4096; addr++)
-  {
-    int data = EEPROM.read(addr); //读数据
+  EEPROM.begin(256);
+  for (int addr = 0; addr < 256; addr ++) {
+    int data = EEPROM.read(addr);
     Serial.print(data);
     Serial.print(" ");
     delay(2);
-    if((addr+1)%256 == 0) //每读取256字节数据换行
-    {
-      Serial.println("");
-    }
   }
-
   Serial.println("End read");
 }
 
-void loop()
-{}
+void loop() {}
