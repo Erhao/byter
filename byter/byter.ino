@@ -59,7 +59,6 @@ void manualWriteCnt() {
   } else {
     text = "Save Failed !";
   }
-  
   displayText(text);
 }
 
@@ -76,6 +75,13 @@ void clearCnt() {
     EEPROM.write(i, 0);
   }
   EEPROM.end();
+}
+
+void manualClearCnt() {
+  clearCnt();
+  cnt = 0;
+  String text = "Cleared !";
+  displayText(text);
 }
 
 void rw() {
@@ -274,7 +280,7 @@ void loop() {
     } else if (pressMillis < TWENTY_SECONDS) {
       Serial.println("a MUCH LONGER press is detected");
       // 清空EEPROM中的cnt
-      clearCnt();
+      manualClearCnt();
     }
   }
   // save the the last state
