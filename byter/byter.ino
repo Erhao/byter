@@ -140,7 +140,7 @@ void startServer() {
   });
 
   server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-    clearCnt();
+    manualClearCnt();
     request->send(200, "text/plain", "KeyStoke Count Cleared!");
   });
   
