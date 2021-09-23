@@ -144,10 +144,11 @@ void startServer() {
     request->send(200, "text/plain", text);
   });
 
-  // server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-  //   manualClearCnt();
-  //   request->send(200, "text/plain", "KeyStoke Count Cleared!");
-  // });
+  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
+    clearCnt();
+    cnt = 0;
+    request->send(200, "text/plain", "KeyStoke Count Cleared!");
+  });
   
   server.begin();
 }
