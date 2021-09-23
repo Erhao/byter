@@ -47,8 +47,11 @@ bool isWifiOn = false;
 
 
 int writeCnt() {
+  EEPROM.begin(5);
   EEPROM.put(addr, cnt);
-  return EEPROM.commit();
+  int res = EEPROM.commit();
+  EEPROM.end();
+  return res;
 }
 
 void manualWriteCnt() {
@@ -64,7 +67,9 @@ void manualWriteCnt() {
 
 unsigned int readCnt() {
   unsigned int _cnt;
+  EEPROM.begin(5);
   EEPROM.get(addr, _cnt);
+  EEPROM.end();
   return _cnt;
 }
 
@@ -133,16 +138,16 @@ void rw() {
 }
 
 void startServer() {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     unsigned int _cnt = readCnt();
     String text = "Up to now, " + (String) _cnt + " keyboard strokes have been recorded.";
     request->send(200, "text/plain", text);
   });
 
-  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-    manualClearCnt();
-    request->send(200, "text/plain", "KeyStoke Count Cleared!");
-  });
+  // server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
+  //   manualClearCnt();
+  //   request->send(200, "text/plain", "KeyStoke Count Cleared!");
+  // });
   
   server.begin();
 }
