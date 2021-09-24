@@ -23,9 +23,13 @@ unsigned int cnt = 0;
 
 int addr = 1;
 
+// 1:清空cnt
+int event = 0;
+
 String helloText[3] = {"Keyboard", "Stokes", "Counter"};
 
 Ticker writeCntTicker;
+Ticker handleEventTicker;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -145,8 +149,7 @@ void startServer() {
   });
 
   server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-    clearCnt();
-    cnt = 0;
+    event = 1;
     request->send(200, "text/plain", "KeyStoke Count Cleared!");
   });
   
@@ -226,6 +229,12 @@ void startDisplay() {
   delay(3000);
 }
 
+void handleEvent() {
+  if (event == 1) {
+    manualClearCnt();
+  }
+}
+
 // main
 void setup() {
   // put your setup code here, to run once:
@@ -257,6 +266,7 @@ void setup() {
   startServer();
 
   writeCntTicker.attach(1800, writeCnt);
+  handleEventTicker.attach(1000, handleEvent);
 }
 
 // loop
