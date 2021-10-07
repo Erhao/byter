@@ -54,6 +54,7 @@ int writeCnt() {
   EEPROM.put(addr, cnt);
   int res = EEPROM.commit();
   EEPROM.end();
+  Serial.println("write cnt");
   return res;
 }
 
@@ -140,6 +141,14 @@ void rw() {
   }
 }
 
+void turnOnLed() {
+  digitalWrite(D6, HIGH);
+}
+
+void turnOffLed() {
+  digitalWrite(D6, LOW);
+}
+
 void startServer() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     unsigned int _cnt = readCnt();
@@ -162,6 +171,8 @@ void enableWifi() {
   
   String text = "WiFi ON";
   displayText(text);
+  
+  turnOnLed();
 }
 
 void disableWifi() {
@@ -170,6 +181,8 @@ void disableWifi() {
   
   String text = "WiFi OFF";
   displayText(text);
+
+  turnOffLed();
 }
 
 void displayNum(unsigned int n) {
@@ -244,6 +257,9 @@ void setup() {
   Serial.println("End read");
   
   PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTMS_U, FUNC_GPIO14);
+  pinMode(D6, OUTPUT);
+
+  turnOffLed();
   
   cnt = readCnt();
   Serial.println("setup readCnt");
