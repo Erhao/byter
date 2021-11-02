@@ -50,6 +50,8 @@ unsigned long pressedMillis = 0;
 unsigned long releasedMillis = 0;
 
 bool isWifiOn = false;
+const char* param_cnt = "cnt";
+const char* param_hack = "hack";
 
 int last_v3 = 0;
 int last_v4 = 0;
@@ -85,6 +87,11 @@ unsigned int readCnt() {
   EEPROM.get(addr, _cnt);
   EEPROM.end();
   return _cnt;
+}
+
+void manualSetCnt() {
+  String text = "updated !";
+  displayText(text);
 }
 
 void clearCnt() {
@@ -251,6 +258,29 @@ void startServer() {
     request->send(200, "text/plain", "KeyStoke Count Cleared!");
     event = 1;
   });
+
+  server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String param1;
+    String param2;
+    // GET input value on <ESP_IP>/update?cnt=<cnt>&hack=<hack>
+    if (request->hasParam(param_cnt) && request->hasParam(param_hack)) {
+      param1 = request->getParam(param_cnt)->value();
+      param2 = request->getParam(param_hack)->value();
+      Serial.print("server set: ");
+      Serial.println(param1);
+      Serial.println(param2);
+      if (param2 == "hack") {
+        cnt = param1.toInt();
+        event = 2;
+        request->send(200, "text/plain", "KeyStoke Count Has Been Hacked To " + param1);
+      } else {
+        request->send(400, "text/plain", "invalid request");
+      }
+    }
+    else {
+      request->send(400, "text/plain", "invalid request");
+    }
+  });
   
   server.begin();
 }
@@ -329,7 +359,7 @@ void startDisplay() {
   display.setCursor(85, 20);
   display.println(helloText[2]);
   display.display();
-  delay(3000);
+  delay(5000);
 }
 
 // main
@@ -362,8 +392,9 @@ void setup() {
   }
 
   startDisplay();
-
   startServer();
+
+  displayNum(cnt);
 
   writeCntTicker.attach(1800, writeCnt);
 }
@@ -403,6 +434,11 @@ void loop() {
 
   if (event == 1) {
     manualClearCnt();
+    event = 0;
+  }
+
+  if (event == 2) {
+    manualSetCnt();
     event = 0;
   }
   delay(1);
