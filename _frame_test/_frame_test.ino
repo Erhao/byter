@@ -5,7 +5,6 @@
 #include <FS.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <Ticker.h>
 #include <EEPROM.h> 
 #include <gpio.h>
 
@@ -31,8 +30,6 @@ int event = 0;
 
 String helloText[3] = {"Keyboard", "Stokes", "Counter"};
 
-Ticker writeCntTicker;
-
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 AsyncWebServer server(80);
@@ -50,8 +47,6 @@ unsigned long pressedMillis = 0;
 unsigned long releasedMillis = 0;
 
 bool isWifiOn = false;
-const char* param_cnt = "cnt";
-const char* param_hack = "hack";
 
 int last_v3 = 0;
 int last_v4 = 0;
@@ -61,53 +56,33 @@ int last_v7 = 0;
 int last_v8 = 0;
 
 
-int writeCnt() {
-  EEPROM.begin(5);
-  EEPROM.put(addr, cnt);
-  int res = EEPROM.commit();
-  EEPROM.end();
-  Serial.println("write cnt");
-  return res;
-}
-
-void manualWriteCnt() {
-  int writeRes = writeCnt();
-  String text = "";
-  if (writeRes) {
-    text = "Saved !";
+void displayNum(unsigned int n) {
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+  if (n <= 99999) {
+    display.setCursor(0, 2);
+    display.setTextSize(4);
+    display.println((String) n);
+  } else if (n <= 9999999) {
+    display.setCursor(0, 5);
+    display.setTextSize(3);
+    display.println((String) n);
+  } else if (n < maxCnt) {
+    display.setCursor(0, 9);
+    if (isCloseToMax) {
+      display.setTextSize(1);
+      display.println("CloseToMAX..");
+    } else {
+      display.setTextSize(2);
+    }
+    display.println((String) n);
   } else {
-    text = "Save Failed !";
+    display.setTextSize(1);
+    display.println("Overflowing");
+    display.println((String) maxCnt);
+    isOverflow = true;
   }
-  displayText(text);
-}
-
-unsigned int readCnt() {
-  unsigned int _cnt;
-  EEPROM.begin(5);
-  EEPROM.get(addr, _cnt);
-  EEPROM.end();
-  return _cnt;
-}
-
-void manualSetCnt() {
-  String text = "updated !";
-  displayText(text);
-}
-
-void clearCnt() {
-  EEPROM.begin(5);
-  // write a 0 to all 4 bytes of the EEPROM
-  for (int i = 0; i < 5; i++) {
-    EEPROM.write(i, 0);
-  }
-  EEPROM.end();
-}
-
-void manualClearCnt() {
-  clearCnt();
-  cnt = 0;
-  String text = "Cleared !";
-  displayText(text);
+  display.display();
 }
 
 void rw() {
@@ -239,114 +214,6 @@ void rw() {
   }
 }
 
-void turnOnLed() {
-  digitalWrite(D6, HIGH);
-}
-
-void turnOffLed() {
-  digitalWrite(D6, LOW);
-}
-
-void startServer() {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    unsigned int _cnt = readCnt();
-    String text = "Up to now, " + (String) _cnt + " keyboard strokes have been recorded.";
-    request->send(200, "text/plain", text);
-  });
-
-  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", "KeyStoke Count Cleared!");
-    event = 1;
-  });
-
-  server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String param1;
-    String param2;
-    // GET input value on <ESP_IP>/update?cnt=<cnt>&hack=<hack>
-    if (request->hasParam(param_cnt) && request->hasParam(param_hack)) {
-      param1 = request->getParam(param_cnt)->value();
-      param2 = request->getParam(param_hack)->value();
-      Serial.print("server set: ");
-      Serial.println(param1);
-      Serial.println(param2);
-      if (param2 == "hack") {
-        cnt = param1.toInt();
-        event = 2;
-        request->send(200, "text/plain", "KeyStoke Count Has Been Hacked To " + param1);
-      } else {
-        request->send(400, "text/plain", "invalid request");
-      }
-    }
-    else {
-      request->send(400, "text/plain", "invalid request");
-    }
-  });
-  
-  server.begin();
-}
-
-void enableWifi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.softAP(SSID, PASSWORD);
-  isWifiOn = true;
-  
-  String text = "WiFi ON";
-  displayText(text);
-  
-  turnOnLed();
-}
-
-void disableWifi() {
-  WiFi.mode(WIFI_OFF);
-  isWifiOn = false;
-  
-  String text = "WiFi OFF";
-  displayText(text);
-
-  turnOffLed();
-}
-
-void displayNum(unsigned int n) {
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  if (n <= 99999) {
-    display.setCursor(0, 2);
-    display.setTextSize(4);
-    display.println((String) n);
-  } else if (n <= 9999999) {
-    display.setCursor(0, 5);
-    display.setTextSize(3);
-    display.println((String) n);
-  } else if (n < maxCnt) {
-    display.setCursor(0, 9);
-    if (isCloseToMax) {
-      display.setTextSize(1);
-      display.println("CloseToMAX..");
-    } else {
-      display.setTextSize(2);
-    }
-    display.println((String) n);
-  } else {
-    display.setTextSize(1);
-    display.println("Overflowing");
-    display.println((String) maxCnt);
-    isOverflow = true;
-  }
-  display.display();
-}
-
-void displayText(String text) {
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setCursor(0, 3);
-  display.setTextSize(1);
-  display.println("-------------------");
-  display.println(text);
-  display.println("-------------------");
-  display.display();
-  delay(2000);
-  displayNum(cnt);
-}
 
 void startDisplay() {
   display.clearDisplay();
@@ -359,87 +226,35 @@ void startDisplay() {
   display.setCursor(85, 20);
   display.println(helloText[2]);
   display.display();
-  delay(5000);
+  delay(3000);
 }
 
-// main
+void clearCnt() {
+  EEPROM.begin(5);
+  // write a 0 to all 4 bytes of the EEPROM
+  for (int i = 0; i < 5; i++) {
+    EEPROM.write(i, 0);
+  }
+  EEPROM.end();
+}
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
 
-  Serial.println("");
-  EEPROM.begin(256);
-  for (int addr = 0; addr < 256; addr ++) {
-    int data = EEPROM.read(addr);
-    Serial.print(data);
-    Serial.print(" ");
-    delay(2);
-  }
-  Serial.println("End read");
-  
-  PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTMS_U, FUNC_GPIO14);
-  pinMode(D6, OUTPUT);
+  Serial.println("setup");
 
-  turnOffLed();
-  
-  cnt = readCnt();
-  Serial.println("setup readCnt");
-  Serial.println(cnt);
+  clearCnt();
 
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
-
   startDisplay();
-  startServer();
-
-  displayNum(cnt);
-
-  writeCntTicker.attach(1800, writeCnt);
 }
 
-// loop
+
 void loop() {
-  rw();
-
-  // read the state of the switch/button:
-  curState = GPIO_INPUT_GET(GPIO_ID_PIN(BTN_PIN));
-
-  if (lastState == LOW && curState == HIGH)        // button is pressed
-    pressedMillis = millis();
-  else if (lastState == HIGH && curState == LOW) { // button is released
-    releasedMillis = millis();
-    long pressMillis = releasedMillis - pressedMillis;
-    if (pressMillis < ONE_SECOND) {
-      Serial.println("a SHORT press is detected");
-      // 将cnt写入EEPROM
-      manualWriteCnt();
-    } else if (pressMillis < TEN_SECONDS) {
-      Serial.println("a LONG press is detected");
-      // 开关wifi
-      if (isWifiOn) {
-        disableWifi();
-      } else {
-        enableWifi();
-      }
-    } else if (pressMillis < TWENTY_SECONDS) {
-      Serial.println("a MUCH LONGER press is detected");
-      // 清空EEPROM中的cnt
-      manualClearCnt();
-    }
-  }
-  // save the the last state
-  lastState = curState;
-
-  if (event == 1) {
-    manualClearCnt();
-    event = 0;
-  }
-
-  if (event == 2) {
-    manualSetCnt();
-    event = 0;
-  }
-  delay(1);
+    rw();
+    delay(1);
 }
