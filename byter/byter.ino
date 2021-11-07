@@ -2,6 +2,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include <FS.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
@@ -26,12 +28,26 @@ unsigned int cnt = 0;
 
 int addr = 1;
 
-// 1:清空cnt
-int event = 0;
+// WiFi
+const char *ssid = "byter_epad";
+const char *password = "dca632240c1c";
+
+// MQTT Broker
+const char *mqtt_broker = "10.3.141.1";
+const char *out_topic = "byter/v1.0";
+String in_topic_prefix = "byter/setcnt/";
+String in_topic = "";
+const char *mqtt_username = "byter_000001";
+const char *mqtt_password = "";
+const int mqtt_port = 1883;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 String helloText[3] = {"Keyboard", "Stokes", "Counter"};
 
 Ticker writeCntTicker;
+Ticker sendCntTicker;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -48,10 +64,6 @@ int lastState = LOW;
 int curState;
 unsigned long pressedMillis = 0;
 unsigned long releasedMillis = 0;
-
-bool isWifiOn = false;
-const char* param_cnt = "cnt";
-const char* param_hack = "hack";
 
 int last_v3 = 0;
 int last_v4 = 0;
@@ -87,11 +99,6 @@ unsigned int readCnt() {
   EEPROM.get(addr, _cnt);
   EEPROM.end();
   return _cnt;
-}
-
-void manualSetCnt() {
-  String text = "updated !";
-  displayText(text);
 }
 
 void clearCnt() {
@@ -247,65 +254,6 @@ void turnOffLed() {
   digitalWrite(D6, LOW);
 }
 
-void startServer() {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    unsigned int _cnt = readCnt();
-    String text = "Up to now, " + (String) _cnt + " keyboard strokes have been recorded.";
-    request->send(200, "text/plain", text);
-  });
-
-  server.on("/clear", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", "KeyStoke Count Cleared!");
-    event = 1;
-  });
-
-  server.on("/set", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String param1;
-    String param2;
-    // GET input value on <ESP_IP>/update?cnt=<cnt>&hack=<hack>
-    if (request->hasParam(param_cnt) && request->hasParam(param_hack)) {
-      param1 = request->getParam(param_cnt)->value();
-      param2 = request->getParam(param_hack)->value();
-      Serial.print("server set: ");
-      Serial.println(param1);
-      Serial.println(param2);
-      if (param2 == "hack") {
-        cnt = param1.toInt();
-        event = 2;
-        request->send(200, "text/plain", "KeyStoke Count Has Been Hacked To " + param1);
-      } else {
-        request->send(400, "text/plain", "invalid request");
-      }
-    }
-    else {
-      request->send(400, "text/plain", "invalid request");
-    }
-  });
-  
-  server.begin();
-}
-
-void enableWifi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.softAP(SSID, PASSWORD);
-  isWifiOn = true;
-  
-  String text = "WiFi ON";
-  displayText(text);
-  
-  turnOnLed();
-}
-
-void disableWifi() {
-  WiFi.mode(WIFI_OFF);
-  isWifiOn = false;
-  
-  String text = "WiFi OFF";
-  displayText(text);
-
-  turnOffLed();
-}
-
 void displayNum(unsigned int n) {
   display.clearDisplay();
   display.setTextColor(WHITE);
@@ -362,6 +310,50 @@ void startDisplay() {
   delay(5000);
 }
 
+void  connWifi() {
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.println("Connecting to WiFi..");
+  }
+  Serial.println("Connected to the WiFi network");
+  //connecting to a mqtt broker
+  client.setServer(mqtt_broker, mqtt_port);
+  client.setCallback(callback);
+  while (!client.connected()) {
+      String client_id = String(WiFi.macAddress());
+      // String client_id = "byter_cli_0001";
+      Serial.printf("The client %s connects to the public mqtt broker\n", client_id.c_str());
+      if (client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+          Serial.println("Public emqx mqtt broker connected");
+          client.publish(out_topic, "hello, msg from esp8266");
+          in_topic = in_topic_prefix + client_id;
+      } else {
+          Serial.print("failed with state ");
+          Serial.print(client.state());
+          delay(2000);
+      }
+  }
+  client.subscribe(in_topic.c_str());
+}
+
+void sendCnt() {
+  String cnt_str = (String) cnt;
+  client.publish(out_topic, cnt_str.c_str());
+  Serial.println("ticker send mqtt");
+}
+
+void callback(char *topic, byte *payload, unsigned int length) {
+  Serial.print("Message arrived in topic: ");
+  Serial.println(topic);
+  Serial.print("Message:");
+  StaticJsonDocument<256> doc;
+  deserializeJson(doc, payload, length);
+  cnt = doc["cnt"];
+  Serial.println();
+  Serial.println("-----------------------");
+}
+
 // main
 void setup() {
   // put your setup code here, to run once:
@@ -392,15 +384,20 @@ void setup() {
   }
 
   startDisplay();
-  startServer();
 
   displayNum(cnt);
 
   writeCntTicker.attach(1800, writeCnt);
+
+  connWifi();
+
+  sendCntTicker.attach(5, sendCnt);
 }
 
 // loop
 void loop() {
+  client.loop();
+
   rw();
 
   // read the state of the switch/button:
@@ -417,12 +414,7 @@ void loop() {
       manualWriteCnt();
     } else if (pressMillis < TEN_SECONDS) {
       Serial.println("a LONG press is detected");
-      // 开关wifi
-      if (isWifiOn) {
-        disableWifi();
-      } else {
-        enableWifi();
-      }
+      // 功能待定
     } else if (pressMillis < TWENTY_SECONDS) {
       Serial.println("a MUCH LONGER press is detected");
       // 清空EEPROM中的cnt
@@ -432,14 +424,5 @@ void loop() {
   // save the the last state
   lastState = curState;
 
-  if (event == 1) {
-    manualClearCnt();
-    event = 0;
-  }
-
-  if (event == 2) {
-    manualSetCnt();
-    event = 0;
-  }
   delay(1);
 }
