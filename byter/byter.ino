@@ -338,9 +338,14 @@ void  connWifi() {
 }
 
 void sendCnt() {
+  // 每5秒调用一次, 发送MQTT消息
+  digitalWrite(D6, HIGH);
+
+  Serial.println("ticker send mqtt");
   String cnt_str = (String) cnt;
   client.publish(out_topic, cnt_str.c_str());
-  Serial.println("ticker send mqtt");
+
+  digitalWrite(D6, LOW);
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
