@@ -24,6 +24,12 @@
 #define VALID_MIN_USAGE_ID 4
 #define VALID_MAX_USAGE_ID 99
 
+// Byter Id
+const char *bid = "byter_0001";
+
+// Mac address
+String macAddr;
+
 unsigned int cnt = 0;
 
 int addr = 1;
@@ -321,13 +327,12 @@ void  connWifi() {
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
   while (!client.connected()) {
-      String client_id = String(WiFi.macAddress());
-      // String client_id = "byter_cli_0001";
-      Serial.printf("The client %s connects to the public mqtt broker\n", client_id.c_str());
-      if (client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+      macAddr = String(WiFi.macAddress());
+      Serial.printf("The client %s connects to the public mqtt broker\n", macAddr.c_str());
+      if (client.connect(macAddr.c_str(), mqtt_username, mqtt_password)) {
           Serial.println("Public emqx mqtt broker connected");
           client.publish(out_topic, "hello, msg from esp8266");
-          in_topic = in_topic_prefix + client_id;
+          in_topic = in_topic_prefix + macAddr;
       } else {
           Serial.print("failed with state ");
           Serial.print(client.state());
@@ -339,11 +344,19 @@ void  connWifi() {
 
 void sendCnt() {
   // 每5秒调用一次, 发送MQTT消息
+  DynamicJsonDocument doc(200);
+  doc["mac"] = macAddr;
+  doc["bid"] = bid;
+  doc["cnt"] = cnt;
+  char buffer[200];
+  serializeJson(doc, buffer);
+  Serial.print("buffer: ");
+  Serial.println(buffer);
+
   digitalWrite(D6, HIGH);
 
   Serial.println("ticker send mqtt");
-  String cnt_str = (String) cnt;
-  client.publish(out_topic, cnt_str.c_str());
+  client.publish(out_topic, buffer);
 
   digitalWrite(D6, LOW);
 }
